@@ -441,37 +441,30 @@ public class SamlClient {
 
   private static SingleSignOnService getPostBinding(IDPSSODescriptor idpSsoDescriptor)
       throws SamlException {
-    return idpSsoDescriptor
-        .getSingleSignOnServices()
-        .stream()
-        .filter(x -> x.getBinding().equals("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"))
-        .findAny()
-        .orElseThrow(() -> new SamlException("Cannot find HTTP-POST SSO binding in metadata"));
+    for (SingleSignOnService x : idpSsoDescriptor.getSingleSignOnServices()) {
+      if (x.getBinding().equals("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST")) {
+        return x;
+      }
+    }
+    throw new SamlException("Cannot find HTTP-POST SSO binding in metadata");
   }
 
   private static X509Certificate getCertificate(IDPSSODescriptor idpSsoDescriptor)
       throws SamlException {
-    KeyDescriptor keyDescriptor =
-        idpSsoDescriptor
-            .getKeyDescriptors()
-            .stream()
-            .filter(x -> x.getUse() == UsageType.SIGNING)
-            .findAny()
-            .orElseThrow(() -> new SamlException("Cannot find signing certificate"));
+    KeyDescriptor keyDescriptor = null;
+    for (KeyDescriptor x : idpSsoDescriptor.getKeyDescriptors()) {
+      if (x.getUse() == UsageType.SIGNING) {
+        keyDescriptor = x;
+        break;
+      }
+    }
+    if (keyDescriptor == null) {
+      throw new SamlException("Cannot find signing certificate");
+    }
 
-    X509Data data =
-        keyDescriptor
-            .getKeyInfo()
-            .getX509Datas()
-            .stream()
-            .findFirst()
-            .orElseThrow(() -> new SamlException("Cannot find X509 data"));
+    X509Data data = keyDescriptor.getKeyInfo().getX509Datas().get(0);
 
-    org.opensaml.xml.signature.X509Certificate certificate =
-        data.getX509Certificates()
-            .stream()
-            .findFirst()
-            .orElseThrow(() -> new SamlException("Cannot find X509 certificate"));
+    org.opensaml.xml.signature.X509Certificate certificate = data.getX509Certificates().get(0);
 
     try {
       return KeyInfoHelper.getCertificate(certificate);
@@ -484,10 +477,10 @@ public class SamlClient {
     try {
       Collection<X509Certificate> certificates =
           X509Util.decodeCertificate(Base64.decode(certificate));
-      return certificates
-          .stream()
-          .findFirst()
-          .orElseThrow(() -> new SamlException("Cannot load certificate"));
+      for (X509Certificate x : certificates) {
+        return x;
+      }
+      throw new SamlException("Cannot load certificate");
     } catch (CertificateException ex) {
       throw new SamlException("Cannot load certificate", ex);
     }
@@ -497,7 +490,6 @@ public class SamlClient {
     BasicX509Credential credential = new BasicX509Credential();
     credential.setEntityCertificate(certificate);
     credential.setPublicKey(certificate.getPublicKey());
-    credential.setCRLs(Collections.emptyList());
     return credential;
   }
 
